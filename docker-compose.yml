@@ -1,0 +1,93 @@
+x-postgres-common:
+    &postgres-common
+    image: postgres:14-alpine
+    user: postgres
+#     restart: always
+    healthcheck:
+        test: 'pg_isready -U user --dbname=postgres'
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+services:
+    postgres_primary:
+        <<: *postgres-common
+        container_name: eshop-catalog-database-service
+        environment:
+            POSTGRES_DB: ${POSTGRES_DB}
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD}
+            POSTGRES_INITDB_ARGS: ${POSTGRES_INITDB_ARGS}
+        command: |
+            postgres
+            -c wal_level=replica
+            -c hot_standby=on
+            -c max_wal_senders=10
+            -c max_replication_slots=10
+            -c hot_standby_feedback=on
+        volumes:
+            - eshop-catalog-database:/var/lib/postgresql/data
+            - ./scripts/01_replication.sql:/docker-entrypoint-initdb.d/01_replication.sql
+        networks:
+            - eshop-network
+        ports:
+            - "5432:5432"
+
+    postgres_replica:
+        <<: *postgres-common
+        depends_on:
+          - postgres_primary
+        container_name: eshop-catalog-database-replica-service
+        environment:
+            PGUSER: ${PGUSER}
+            PGPASSWORD: ${PGPASSWORD}
+        volumes:
+          - eshop-catalog-database-replica:/var/lib/postgresql/data
+        command: |
+            bash -c "
+            until pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot --host=postgres_primary --port=5432
+            do
+                echo 'Waiting for primary to connect...'
+                sleep 1s
+            done
+            echo 'Backup done, starting replica...'
+            chmod 0700 /var/lib/postgresql/data
+            postgres"
+        networks:
+          - eshop-network
+        ports:
+          - 5433:5432
+
+#     grant_permissions:
+#         <<: *postgres-common
+#         depends_on:
+#             - postgres_replica
+#         container_name: eshop-catalog-database-grant-permissions
+#         command: |
+#             bash -c "
+#                 until PGPASSWORD=${POSTGRES_PASSWORD} psql -h postgres_primary -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c \"SELECT state FROM pg_stat_replication WHERE state = 'streaming'\" | grep -q streaming;
+#                 do
+#                     echo 'Waiting for replica to be streaming...'
+#                     sleep 1s
+#                 done
+#                 echo 'Replica is streaming, granting permissions...'
+#                 until PGPASSWORD=${POSTGRES_PASSWORD} psql -h postgres_primary -U ${POSTGRES_USER} -d ${POSTGRES_DB} -f /scripts/02_grant_permissions.sql;
+#                 do
+#                     echo 'Retrying to grant permissions...'
+#                     sleep 1s
+#                 done
+#                 echo 'Permissions granted successfully!'"
+#         volumes:
+#           - ./scripts:/scripts
+#         networks:
+#           - eshop-network
+#         restart: "no"
+
+volumes:
+  eshop-catalog-database:
+  eshop-catalog-database-replica:
+
+networks:
+  eshop-network:
+    external: true
