@@ -33,7 +33,8 @@ services:
             - ./scripts/v0.3-grant_permissions_user_read_only.sql:/docker-entrypoint-initdb.d/v0.3-grant_permissions_user_read_only.sql
             - ./migrations/v0.4-initial_schema.sql:/docker-entrypoint-initdb.d/v0.4-initial_schema.sql
             - ./triggers/v0.5-updated_at.sql:/docker-entrypoint-initdb.d/v0.5-updated_at.sql
-            - ./tests/x0.1-insert_test_data_into_brands.sql:/docker-entrypoint-initdb.d/x0.1-insert_test_data_into_brands.sql
+            - ./tests/x0.1-insert_test_data_into_brand_approval_states.sql:/docker-entrypoint-initdb.d/x0.1-insert_test_data_into_brand_approval_states.sql
+            - ./tests/x0.2-insert_test_data_into_brands.sql:/docker-entrypoint-initdb.d/x0.2-insert_test_data_into_brands.sql
         networks:
             - eshop-network
         ports:
