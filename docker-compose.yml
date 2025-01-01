@@ -1,0 +1,78 @@
+x-postgres-common:
+    &postgres-common
+    image: postgres:14-alpine
+    user: postgres
+    restart: always
+    healthcheck:
+        test: 'pg_isready -U user --dbname=postgres'
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+services:
+    postgres_primary:
+        <<: *postgres-common
+        container_name: eshop-catalog-database-service
+        environment:
+            POSTGRES_DB: ${POSTGRES_DB}
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD}
+            POSTGRES_INITDB_ARGS: ${POSTGRES_INITDB_ARGS}
+        command: |
+            postgres
+            -c wal_level=replica
+            -c hot_standby=on
+            -c max_wal_senders=10
+            -c max_replication_slots=10
+            -c hot_standby_feedback=on
+        volumes:
+            - eshop-catalog-database:/var/lib/postgresql/data
+            - ./scripts/v0.1-replication.sql:/docker-entrypoint-initdb.d/v0.1-replication.sql
+            - ./scripts/v0.2-grant_permissions_user_read_write.sql:/docker-entrypoint-initdb.d/v0.2-grant_permissions_user_read_write.sql
+            - ./scripts/v0.3-grant_permissions_user_read_only.sql:/docker-entrypoint-initdb.d/v0.3-grant_permissions_user_read_only.sql
+            - ./migrations/v0.4-initial_schema.sql:/docker-entrypoint-initdb.d/v0.4-initial_schema.sql
+            - ./triggers/v0.5-updated_at.sql:/docker-entrypoint-initdb.d/v0.5-updated_at.sql
+            - ./tests/x0.1-insert_test_data_into_brand_approval_states.sql:/docker-entrypoint-initdb.d/x0.1-insert_test_data_into_brand_approval_states.sql
+            - ./tests/x0.2-insert_test_data_into_brands.sql:/docker-entrypoint-initdb.d/x0.2-insert_test_data_into_brands.sql
+        networks:
+            - eshop-network
+        ports:
+            - "5432:5432"
+
+    postgres_replica:
+        <<: *postgres-common
+        depends_on:
+          - postgres_primary
+        container_name: eshop-catalog-database-replica-service
+        environment:
+            PGUSER: ${PGUSER}
+            PGPASSWORD: ${PGPASSWORD}
+        volumes:
+          - eshop-catalog-database-replica:/var/lib/postgresql/data
+        command: |
+            bash -c "
+                if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+                    echo 'Initializing replica...'
+                    until pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot --host=postgres_primary --port=5432
+                    do
+                        echo 'Waiting for primary to connect...'
+                        sleep 1s
+                    done
+                    echo 'Backup done, starting replica...'
+                    chmod 0700 /var/lib/postgresql/data
+                fi
+                echo 'Starting PostgreSQL...'
+                postgres"
+        networks:
+          - eshop-network
+        ports:
+          - 5433:5432
+
+volumes:
+  eshop-catalog-database:
+  eshop-catalog-database-replica:
+
+networks:
+  eshop-network:
+    external: true

@@ -1,9 +1,5 @@
 # README
 
-1. El uso automatizado de este repositorio solo sirve para DataGrip
-2. Instalar el plugin de Docker para DataGrip
-3. Instalar el plugin de .env para DataGrip
-
 Recuerda crear la red eshop en docker:
 
 ```
@@ -25,19 +21,15 @@ Para trabajar con esta base de datos en LOCAL recomendamos lo siguiente:
 3. Ejecutar un comando de TRUNCATE para la base de datos en LOCAL
 3. Realizar la importacion de la base de datos de LOCAL.
 
-Sobre el uso de la replica:
-1. Ejecutar el docker-compose.yml
-```
-docker-compose up -d
-```
+## Configuracion por defecto
 
-2. Conectarse al contenedor maestro (eshop-catalog-database-service) y realiza un backup base:
-```
-docker exec -it eshop-catalog-database-service pg_basebackup -h localhost -U ${POSTGRES_USER} -D /var/lib/postgresql/data -Fp -Xs -P -R
-```
+Puertos de conexion:
 
-3. El comando anterior generará automáticamente el archivo `recovery.conf` necesario para conectarse al maestro. Verifica que la conexión al maestro esté correcta.
-4. Vuelve a levantar los servicios:
-```
-docker-compose up -d
-```
+1. Base de datos maestro: puerto 5432
+2. Base de datos replica: puerto 5433 -> Solo lectura
+
+Usuarios para la base de datos eshop_catalog_database:
+1. user_read_write: SELECT, INSERT, UPDATE, DELETE
+2. user_read_only: SELECT
+
+> Si se intenta usar el usuario `user_read_write` en la replica, no servira de nada, ya que todo lo que se obtiene es un error de escritura por permisos.
